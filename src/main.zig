@@ -1,6 +1,6 @@
-usingnamespace @import("chunks.zig");
-usingnamespace @import("hunk.zig");
-usingnamespace @import("vtable.zig");
+pub const chunks = @import("chunks.zig");
+pub const hunk = @import("hunk.zig");
+pub const vtable = @import("vtable.zig");
 
 test "" {
     _ = @import("chunks.zig");
