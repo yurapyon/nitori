@@ -5,17 +5,6 @@
 //   can work with ZSTs
 // optional fns
 
-// const VTable = struct {
-//     fn1: fn () void,
-//     fn2: fn () void,
-// };
-//
-// // input should be
-// const In = struct {
-//     fn fn1() void {}
-//     fn fn2() void {}
-// };
-
 const std = @import("std");
 const builtin = @import("builtin");
 const TypeInfo = builtin.TypeInfo;

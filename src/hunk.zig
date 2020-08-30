@@ -2,8 +2,8 @@
 
 const std = @import("std");
 const builtin = @import("builtin");
-
 const assert = std.debug.assert;
+
 const Allocator = std.mem.Allocator;
 
 const vtable = @import("vtable.zig");
@@ -60,8 +60,6 @@ const HunkSide = struct {
         return self.vtable.alloc(self, real_len, ptr_align);
     }
 
-    // in place resize
-    // return possible len that this allocation could be resized to
     fn resizeFn(
         allocator: *Allocator,
         buf: []u8,
@@ -71,11 +69,8 @@ const HunkSide = struct {
         ret_addr: usize,
     ) Allocator.Error!usize {
         if (new_len == 0) {
-            // free memory
-            // in this case its a no-op and leaks memory
             return 0;
         } else if (new_len <= buf.len) {
-            // TODO is this right to use?
             return std.mem.alignAllocLen(buf.len, new_len, len_align);
         } else {
             // TODO interesting idea would be to allow this if resizing the last allocation
