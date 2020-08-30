@@ -15,7 +15,7 @@ const HunkSide = struct {
 
     const VTable = struct {
         alloc: fn (*HunkSide, usize, u29) Allocator.Error![]u8,
-        deinit_memory: fn (*HunkSide, usize) void,
+        deinitMemory: fn (*HunkSide, usize) void,
     };
 
     vtable: *const VTable,
@@ -41,7 +41,7 @@ const HunkSide = struct {
         assert(mark <= self.mark);
         if (mark == self.mark) return;
         if (builtin.mode == builtin.Mode.Debug) {
-            self.vtable.deinit_memory(self, mark);
+            self.vtable.deinitMemory(self, mark);
         }
         self.mark = mark;
     }
@@ -104,7 +104,7 @@ const Hunk = struct {
             return ret;
         }
 
-        pub fn deinit_memory(side: *HunkSide, mark: usize) void {
+        pub fn deinitMemory(side: *HunkSide, mark: usize) void {
             const hunk = @fieldParentPtr(Hunk, "low", side);
             std.mem.set(u8, hunk.buffer[mark..side.mark], undefined);
         }
@@ -126,7 +126,7 @@ const Hunk = struct {
             return ret;
         }
 
-        pub fn deinit_memory(side: *HunkSide, mark: usize) void {
+        pub fn deinitMemory(side: *HunkSide, mark: usize) void {
             const hunk = @fieldParentPtr(Hunk, "high", side);
             const start = hunk.buffer.len - side.mark;
             const end = hunk.buffer.len - mark;
