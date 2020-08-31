@@ -43,7 +43,9 @@ fn checkCompatibility(
             const expect_ptr = expect_arg_info.Pointer;
             const actual_ptr = @typeInfo(actual_arg.arg_type.?).Pointer;
             assert(expect_ptr.size == TypeInfo.Pointer.Size.One);
-            assert(actual_ptr.child == T);
+            // TODO if using a default impl of a method
+            //   this wont be true, itll be Impl instead
+            // assert(actual_ptr.child == T);
             assert(expect_ptr.size == actual_ptr.size);
             assert(expect_ptr.is_const == actual_ptr.is_const);
             assert(expect_ptr.is_volatile == actual_ptr.is_volatile);
@@ -131,6 +133,8 @@ const Obj = struct {
         return self.vtable.doSomething2.?(in);
     }
 };
+
+// TODO make a better test
 
 test "interface" {
     var o1 = Obj.init(&struct {

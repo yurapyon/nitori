@@ -1,9 +1,15 @@
 pub const chunks = @import("chunks.zig");
+pub const communication = @import("communication.zig");
 pub const hunk = @import("hunk.zig");
+pub const pool = @import("pool.zig");
+pub const timer = @import("timer.zig");
 pub const vtable = @import("vtable.zig");
 
 test "" {
-    _ = @import("chunks.zig");
-    _ = @import("hunk.zig");
-    _ = @import("vtable.zig");
+    _ = chunks;
+    _ = communication;
+    _ = hunk;
+    _ = pool;
+    _ = timer;
+    _ = vtable;
 }

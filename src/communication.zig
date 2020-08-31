@@ -193,7 +193,7 @@ test "EventChannel: send recv" {
     var send = chan.makeSender();
     var recv = chan.makeReceiver();
 
-    var tm = Timer.start();
+    var tm = @import("timer.zig").Timer.start();
 
     try send.send(tm.now(), 0);
     try send.send(tm.now(), 1);
