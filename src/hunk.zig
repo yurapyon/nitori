@@ -145,37 +145,54 @@ const Hunk = struct {
 // tests ===
 
 const testing = std.testing;
+const expect = testing.expect;
 
 test "hunk" {
-    // test a few random operations. very low coverage. write more later
-    var buf: [100]u8 = undefined;
-    var hunk = Hunk.init(buf[0..]);
+    var buffer: [20]u8 = undefined;
+    var hunk = Hunk.init(buffer[0..]);
 
-    const high_mark = hunk.high.getMark();
+    {
+        expect(hunk.high.getMark() == 0);
 
-    _ = try hunk.low.allocator.alloc(u8, 7);
-    _ = try hunk.high.allocator.alloc(u8, 8);
+        _ = try hunk.high.allocator.alloc(u8, 3);
+        expect(hunk.high.getMark() == 3);
 
-    testing.expectEqual(@as(usize, 7), hunk.low.mark);
-    testing.expectEqual(@as(usize, 8), hunk.high.mark);
+        const mark = hunk.high.getMark();
+        _ = try hunk.high.allocator.alloc(u8, 3);
+        expect(hunk.high.getMark() == 6);
 
-    _ = try hunk.high.allocator.alloc(u8, 8);
+        hunk.high.freeToMark(mark);
+        expect(hunk.high.getMark() == 3);
+    }
 
-    testing.expectEqual(@as(usize, 16), hunk.high.mark);
+    {
+        expect(hunk.low.getMark() == 0);
 
-    const low_mark = hunk.low.getMark();
+        _ = try hunk.low.allocator.alloc(u8, 3);
+        expect(hunk.low.getMark() == 3);
 
-    _ = try hunk.low.allocator.alloc(u8, 100 - 7 - 16);
+        const mark = hunk.low.getMark();
+        _ = try hunk.low.allocator.alloc(u8, 3);
+        expect(hunk.low.getMark() == 6);
 
-    testing.expectEqual(@as(usize, 100 - 16), hunk.low.mark);
+        hunk.low.freeToMark(mark);
+        expect(hunk.low.getMark() == 3);
+    }
 
-    testing.expectError(error.OutOfMemory, hunk.high.allocator.alloc(u8, 1));
+    hunk.low.freeToMark(0);
+    hunk.high.freeToMark(0);
 
-    hunk.low.freeToMark(low_mark);
+    {
+        _ = try hunk.low.allocator.alloc(u8, 10);
 
-    _ = try hunk.high.allocator.alloc(u8, 1);
+        const mark = hunk.high.getMark();
+        _ = try hunk.high.allocator.alloc(u8, 10);
 
-    hunk.high.freeToMark(high_mark);
+        testing.expectError(error.OutOfMemory, hunk.high.allocator.alloc(u8, 1));
+        testing.expectError(error.OutOfMemory, hunk.low.allocator.alloc(u8, 1));
 
-    testing.expectEqual(@as(usize, 0), hunk.high.mark);
+        hunk.high.freeToMark(mark);
+        _ = try hunk.high.allocator.alloc(u8, 1);
+        _ = try hunk.low.allocator.alloc(u8, 1);
+    }
 }
