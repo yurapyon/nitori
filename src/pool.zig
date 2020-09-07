@@ -59,10 +59,7 @@ pub fn Pool(comptime T: type) type {
 
         pub fn trySpawn(self: *Self) ?*T {
             if (self.isEmpty()) return null;
-
-            const at = self.alive_ct;
-            self.alive_ct += 1;
-            return &self.data.items[self.offsets.items[at]];
+            return self.spawn();
         }
 
         // may invalidate old pointers,
@@ -191,6 +188,23 @@ test "Pool" {
     // may mess with the order
     pool.reclaim(kill3);
     expect(pool.aliveCount() == 2);
+
+    var found_one: bool = false;
+    var found_five: bool = false;
+
+    iter = pool.iter();
+    while (iter.next()) |val| {
+        if (val.* == 1) {
+            expect(!found_one);
+            found_one = true;
+        } else if (val.* == 5) {
+            expect(!found_five);
+            found_five = true;
+        }
+    }
+
+    expect(found_one);
+    expect(found_five);
 
     var i: usize = 0;
     while (i < 8) : (i += 1) {

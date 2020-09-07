@@ -5,6 +5,8 @@
 //   can work with ZSTs
 // optional fns
 
+// TODO figure out a way to have it soe some implementors can be ZSTs and some not
+
 const std = @import("std");
 const builtin = @import("builtin");
 const TypeInfo = builtin.TypeInfo;
@@ -43,9 +45,8 @@ fn checkCompatibility(
             const expect_ptr = expect_arg_info.Pointer;
             const actual_ptr = @typeInfo(actual_arg.arg_type.?).Pointer;
             assert(expect_ptr.size == TypeInfo.Pointer.Size.One);
-            // TODO if using a default impl of a method
-            //   this wont be true, itll be Impl instead
-            // assert(actual_ptr.child == T);
+            assert(actual_ptr.child == T or
+                actual_ptr.child == VTable.Impl);
             assert(expect_ptr.size == actual_ptr.size);
             assert(expect_ptr.is_const == actual_ptr.is_const);
             assert(expect_ptr.is_volatile == actual_ptr.is_volatile);

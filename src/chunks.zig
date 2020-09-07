@@ -1,6 +1,7 @@
 const std = @import("std");
 const math = std.math;
 
+// TODO rename to ChunkIter
 pub fn ChunkIterator(comptime T: type) type {
     return struct {
         const Self = @This();

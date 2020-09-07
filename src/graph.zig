@@ -4,10 +4,16 @@ const ArrayList = std.ArrayList;
 
 //;
 
-const NodeIndex = usize;
-const EdgeIndex = usize;
+// TODO
+//   annotate error return types
+//   check if graph has a node/edge at idx or not
+//   debug.assert indices are in bounds
+//   node and edge iterators
 
-const Direction = enum(usize) {
+pub const NodeIndex = usize;
+pub const EdgeIndex = usize;
+
+pub const Direction = enum(usize) {
     const Self = @This();
 
     Outgoing,
@@ -66,6 +72,8 @@ pub fn Graph(comptime N: type, comptime E: type) type {
             }
         };
 
+        //;
+
         nodes: ArrayList(Node),
         edges: ArrayList(Edge),
         next_node: ?NodeIndex,
@@ -81,9 +89,30 @@ pub fn Graph(comptime N: type, comptime E: type) type {
         }
 
         pub fn deinit(self: *Self) void {
-            self.nodes.deinit();
             self.edges.deinit();
+            self.nodes.deinit();
         }
+
+        pub fn clone(self: Self, allocator: *Allocator) !Self {
+            var nodes = try ArrayList(Node).initCapacity(allocator, self.nodes.items.len);
+            errdefer nodes.deinit();
+            nodes.items.len = self.nodes.items.len;
+            for (self.nodes.items) |node, i| nodes.items[i] = node;
+
+            var edges = try ArrayList(Edge).initCapacity(allocator, self.edges.items.len);
+            errdefer edges.deinit();
+            edges.items.len = self.edges.items.len;
+            for (self.edges.items) |edge, i| edges.items[i] = edge;
+
+            return Self{
+                .nodes = nodes,
+                .edges = edges,
+                .next_node = self.next_node,
+                .next_edge = self.next_edge,
+            };
+        }
+
+        //;
 
         fn removeEdgeFromNode(
             self: *Self,

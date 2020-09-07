@@ -1,4 +1,5 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 
 const assert = std.debug.assert;
 
@@ -10,11 +11,12 @@ const Error = error{
 };
 
 /// SPSC, lock-free push and pop
-/// allocation free, doesnt own data
+/// allocation free, data is fixed size
 pub fn Queue(comptime T: type) type {
     return struct {
         const Self = @This();
 
+        allocator: *Allocator,
         data: []T,
         write_pt: usize,
         read_pt: usize,
@@ -23,12 +25,17 @@ pub fn Queue(comptime T: type) type {
             return (idx + 1) % self.data.len;
         }
 
-        pub fn init(data: []T) Self {
-            return .{
-                .data = data,
+        pub fn init(allocator: *Allocator, count: usize) !Self {
+            return Self{
+                .allocator = allocator,
+                .data = try allocator.alloc(T, count),
                 .write_pt = 0,
                 .read_pt = 0,
             };
+        }
+
+        pub fn deinit(self: *Self) void {
+            self.allocator.free(self.data);
         }
 
         pub fn push(self: *Self, val: T) !void {
@@ -79,11 +86,15 @@ pub fn Channel(comptime T: type) type {
         queue: Queue(T),
         write_lock: bool,
 
-        pub fn init(data: []T) Self {
-            return .{
+        pub fn init(allocator: *Allocator, count: usize) !Self {
+            return Self{
                 .write_lock = false,
-                .queue = Queue(T).init(data),
+                .queue = try Queue(T).init(allocator, count),
             };
+        }
+
+        pub fn deinit(self: *Self) void {
+            self.queue.deinit();
         }
 
         pub fn push(self: *Self, val: T) !void {
@@ -94,6 +105,14 @@ pub fn Channel(comptime T: type) type {
 
         pub fn pop(self: *Self) !T {
             return self.queue.pop();
+        }
+
+        pub fn makeSender(self: *Self) Sender {
+            return .{ .channel = self };
+        }
+
+        pub fn makeReceiver(self: *Self) Receiver {
+            return .{ .channel = self };
         }
     };
 }
@@ -110,6 +129,7 @@ pub fn EventChannel(comptime T: type) type {
             data: T,
         };
 
+        // TODO use channel.receiver and sender
         pub const Receiver = struct {
             event_channel: *EventChannel(T),
             last_event: ?Event,
@@ -152,8 +172,14 @@ pub fn EventChannel(comptime T: type) type {
 
         channel: Channel(Event),
 
-        pub fn init(events_buffer: []Event) Self {
-            return .{ .channel = Channel(Event).init(events_buffer) };
+        pub fn init(allocator: *Allocator, count: usize) !Self {
+            return Self{
+                .channel = try Channel(Event).init(allocator, count),
+            };
+        }
+
+        pub fn deinit(self: *Self) void {
+            self.channel.deinit();
         }
 
         pub fn makeSender(self: *Self) Sender {
@@ -171,11 +197,12 @@ pub fn EventChannel(comptime T: type) type {
 
 // tests ===
 
-const expect = std.testing.expect;
+const testing = std.testing;
+const expect = testing.expect;
 
 test "Queue: push pop" {
-    var buf: [15]u8 = undefined;
-    var q = Queue(u8).init(&buf);
+    var q = try Queue(u8).init(testing.allocator, 15);
+    defer q.deinit();
     try q.push(1);
     try q.push(2);
     try q.push(3);
@@ -188,8 +215,9 @@ test "Queue: push pop" {
 test "EventChannel: send recv" {
     const EnvChan = EventChannel(u8);
 
-    var buf: [50]EnvChan.Event = undefined;
-    var chan = EnvChan.init(&buf);
+    var chan = try EnvChan.init(testing.allocator, 50);
+    defer chan.deinit();
+
     var send = chan.makeSender();
     var recv = chan.makeReceiver();
 
