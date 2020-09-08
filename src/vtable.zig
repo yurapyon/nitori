@@ -122,7 +122,7 @@ const Obj = struct {
 
     fn init(obj: anytype) Obj {
         return .{
-            .vtable = comptime populate(VTable, @TypeOf(obj).Child),
+            .vtable = comptime populate(VTable, @typeInfo(@TypeOf(obj)).Pointer.child),
         };
     }
 

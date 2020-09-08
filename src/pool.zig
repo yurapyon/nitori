@@ -1,13 +1,34 @@
 const std = @import("std");
-
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
+const assert = std.debug.assert;
+
+//;
+
+// could further increase cache locality by doing a binary search to kill objects
+//   or something
+// some way of using the lowest offsets first so theyre all usually in one spot
 
 pub fn Pool(comptime T: type) type {
     return struct {
         const Self = @This();
 
         pub const Iter = struct {
+            pool: *const Self,
+            idx: usize,
+
+            pub fn next(self: *Iter) ?*const T {
+                if (self.idx >= self.pool.alive_ct) {
+                    return null;
+                } else {
+                    const get = &self.pool.data.items[self.pool.offsets.items[self.idx]];
+                    self.idx += 1;
+                    return get;
+                }
+            }
+        };
+
+        pub const IterMut = struct {
             pool: *Self,
             idx: usize,
 
@@ -50,21 +71,53 @@ pub fn Pool(comptime T: type) type {
 
         //;
 
-        // undefined behavior if pool has no available objects
+        // asserts pool isnt empty
         pub fn spawn(self: *Self) *T {
+            assert(!self.isEmpty());
             const at = self.alive_ct;
             self.alive_ct += 1;
             return &self.data.items[self.offsets.items[at]];
         }
 
+        // TODO maybe return an error here instead
+        //    if not, rename to maybeSpawn
         pub fn trySpawn(self: *Self) ?*T {
             if (self.isEmpty()) return null;
             return self.spawn();
         }
 
-        // may invalidate old pointers,
-        //   for this reason, its not a good idea to save pointers returned by spawn
-        //   let the pool manage the memory for you, use iterators and reclaim
+        // asserts this object is from this pool, and is alive
+        pub fn kill(self: *Self, obj: *T) void {
+            assert(blk: {
+                const t = @ptrToInt(obj);
+                const d = @ptrToInt(self.data.items.ptr);
+                break :blk t >= d and t < (d + self.data.items.len);
+            });
+            assert(blk: {
+                const t = @ptrToInt(obj);
+                const d = @ptrToInt(self.data.items.ptr);
+                const o = t - d;
+                var i: usize = 0;
+                while (i < self.alive_ct) : (i += 1) {
+                    if (self.offsets.items[i] == o) {
+                        break :blk true;
+                    }
+                }
+                break :blk false;
+            });
+
+            const obj_ptr = @ptrToInt(obj);
+            const data_ptr = @ptrToInt(self.data.items.ptr);
+            const offset = obj_ptr - data_ptr;
+            self.alive_ct -= 1;
+            self.offsets.items[self.alive_ct] = offset;
+        }
+
+        //;
+
+        // this function may invalidate pointers to objects in the pool
+        //   if you plan to use this function it's recommended let the pool manage the memory for you,
+        //     using iterators and reclaim
         pub fn pleaseSpawn(self: *Self) !*T {
             if (self.isEmpty()) {
                 try self.offsets.append(self.data.items.len);
@@ -73,7 +126,14 @@ pub fn Pool(comptime T: type) type {
             return self.spawn();
         }
 
-        pub fn iter(self: *Self) Iter {
+        pub fn iter(self: *const Self) Iter {
+            return .{
+                .pool = self,
+                .idx = 0,
+            };
+        }
+
+        pub fn iterMut(self: *Self) IterMut {
             return .{
                 .pool = self,
                 .idx = 0,
@@ -120,6 +180,7 @@ pub fn Pool(comptime T: type) type {
         // TODO
         //   attach
         //   detach
+        //   sort the dead
 
         //;
 
@@ -218,4 +279,14 @@ test "Pool" {
     expect(pool.capacity() == 11);
     expect(pool.aliveCount() == 11);
     expect(pool.isEmpty());
+}
+
+test "Pool kill" {
+    var pool = try Pool(u8).init(testing.allocator, 10);
+    defer pool.deinit();
+
+    const obj = pool.spawn();
+    expect(pool.aliveCount() == 1);
+    pool.kill(obj);
+    expect(pool.aliveCount() == 0);
 }
