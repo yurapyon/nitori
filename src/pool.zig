@@ -86,17 +86,21 @@ pub fn Pool(comptime T: type) type {
             return self.spawn();
         }
 
+        // TODO killStable
         // asserts this object is from this pool, and is alive
         pub fn kill(self: *Self, obj: *T) void {
+            // assert ptr is from this pool
             assert(blk: {
                 const t = @ptrToInt(obj);
                 const d = @ptrToInt(self.data.items.ptr);
-                break :blk t >= d and t < (d + self.data.items.len);
+                break :blk t >= d and t < (d + self.data.items.len * @sizeOf(T));
             });
+
+            // assert ptr is alive
             assert(blk: {
                 const t = @ptrToInt(obj);
                 const d = @ptrToInt(self.data.items.ptr);
-                const o = t - d;
+                const o = (t - d) / @sizeOf(T);
                 var i: usize = 0;
                 while (i < self.alive_ct) : (i += 1) {
                     if (self.offsets.items[i] == o) {
@@ -108,9 +112,20 @@ pub fn Pool(comptime T: type) type {
 
             const obj_ptr = @ptrToInt(obj);
             const data_ptr = @ptrToInt(self.data.items.ptr);
-            const offset = obj_ptr - data_ptr;
+            const offset = (obj_ptr - data_ptr) / @sizeOf(T);
+
             self.alive_ct -= 1;
-            self.offsets.items[self.alive_ct] = offset;
+
+            var i: usize = 0;
+            while (i < self.alive_ct) : (i += 1) {
+                if (self.offsets.items[i] == offset) {
+                    std.mem.swap(
+                        usize,
+                        &self.offsets.items[self.alive_ct],
+                        &self.offsets.items[i],
+                    );
+                }
+            }
         }
 
         //;
