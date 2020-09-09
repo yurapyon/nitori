@@ -32,7 +32,7 @@ pub fn Pool(comptime T: type) type {
             pool: *Self,
             idx: usize,
 
-            pub fn next(self: *Iter) ?*T {
+            pub fn next(self: *IterMut) ?*T {
                 if (self.idx >= self.pool.alive_ct) {
                     return null;
                 } else {
