@@ -14,6 +14,7 @@ pub const Timer = struct {
         };
     }
 
+    // TODO make this take *const Self instead of *Self
     pub fn now(self: *Self) u64 {
         const time = self.tm.read();
         _ = @atomicRmw(@TypeOf(self.last_now), &self.last_now, .Max, time, .Monotonic);

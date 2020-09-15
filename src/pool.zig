@@ -43,6 +43,18 @@ pub fn Pool(comptime T: type) type {
             }
         };
 
+        pub const Ptr = struct {
+            pool: *Self,
+            obj: *T,
+
+            pub fn kill(self: *Ptr) void {
+                self.pool.kill(self.obj);
+            }
+
+            // TODO
+            pub fn killStable(self: *Ptr) void {}
+        };
+
         data: ArrayList(T),
         offsets: ArrayList(usize),
         alive_ct: usize,
@@ -126,6 +138,13 @@ pub fn Pool(comptime T: type) type {
                     );
                 }
             }
+        }
+
+        pub fn spawnPtr(self: *Self) Ptr {
+            return .{
+                .pool = self,
+                .obj = self.spawn(),
+            };
         }
 
         //;
