@@ -38,20 +38,20 @@ pub fn Queue(comptime T: type) type {
             self.allocator.free(self.data);
         }
 
-        pub fn push(self: *Self, val: T) !void {
+        pub fn push(self: *Self, val: T) Error!void {
             const read_pt = @atomicLoad(@TypeOf(self.read_pt), &self.read_pt, .Monotonic);
             if (read_pt == self.next_idx(self.write_pt)) {
-                return error.OutOfSpace;
+                return Error.OutOfSpace;
             }
             self.data[self.write_pt] = val;
             @fence(.SeqCst);
             self.write_pt = self.next_idx(self.write_pt);
         }
 
-        pub fn pop(self: *Self) !T {
+        pub fn pop(self: *Self) Error!T {
             const write_pt = @atomicLoad(@TypeOf(self.write_pt), &self.write_pt, .Monotonic);
             if (write_pt == self.read_pt) {
-                return error.Empty;
+                return Error.Empty;
             }
             const ret = self.data[self.read_pt];
             @fence(.SeqCst);
@@ -78,7 +78,7 @@ pub fn Channel(comptime T: type) type {
         pub const Sender = struct {
             channel: *Self,
 
-            pub fn send(self: *Sender, val: T) !void {
+            pub fn send(self: *Sender, val: T) Error!void {
                 return self.channel.push(val);
             }
         };
@@ -86,7 +86,7 @@ pub fn Channel(comptime T: type) type {
         queue: Queue(T),
         write_lock: bool,
 
-        pub fn init(allocator: *Allocator, count: usize) !Self {
+        pub fn init(allocator: *Allocator, count: usize) Allocator.Error!Self {
             return Self{
                 .write_lock = false,
                 .queue = try Queue(T).init(allocator, count),
@@ -97,7 +97,7 @@ pub fn Channel(comptime T: type) type {
             self.queue.deinit();
         }
 
-        pub fn push(self: *Self, val: T) !void {
+        pub fn push(self: *Self, val: T) Error!void {
             while (@atomicRmw(@TypeOf(self.write_lock), &self.write_lock, .Xchg, true, .SeqCst)) {}
             defer assert(@atomicRmw(@TypeOf(self.write_lock), &self.write_lock, .Xchg, false, .SeqCst));
             return self.queue.push(val);
@@ -160,7 +160,7 @@ pub fn EventChannel(comptime T: type) type {
         pub const Sender = struct {
             event_channel: *EventChannel(T),
 
-            pub fn send(self: *Sender, timestamp: u64, data: T) !void {
+            pub fn send(self: *Sender, timestamp: u64, data: T) Error!void {
                 // TODO make sure this timestamp isnt before the last one pushed
                 // invalid timestamp error
                 return self.event_channel.channel.push(.{
@@ -172,7 +172,7 @@ pub fn EventChannel(comptime T: type) type {
 
         channel: Channel(Event),
 
-        pub fn init(allocator: *Allocator, count: usize) !Self {
+        pub fn init(allocator: *Allocator, count: usize) Allocator.Error!Self {
             return Self{
                 .channel = try Channel(Event).init(allocator, count),
             };
@@ -221,7 +221,7 @@ test "EventChannel: send recv" {
     var send = chan.makeSender();
     var recv = chan.makeReceiver();
 
-    var tm = @import("timer.zig").Timer.start();
+    var tm = try @import("timer.zig").Timer.start();
 
     try send.send(tm.now(), 0);
     try send.send(tm.now(), 1);

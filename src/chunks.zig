@@ -1,8 +1,9 @@
 const std = @import("std");
 const math = std.math;
 
-// TODO rename to ChunkIter
-pub fn ChunkIterator(comptime T: type) type {
+// TODO const chunk iter
+
+pub fn ChunkIterMut(comptime T: type) type {
     return struct {
         const Self = @This();
 
@@ -41,7 +42,7 @@ test "chunks" {
     var hello: [5]u8 = .{ 'h', 'e', 'l', 'l', 'o' };
 
     {
-        var chunks = ChunkIterator(u8).init(&hello, 2);
+        var chunks = ChunkIterMut(u8).init(&hello, 2);
         expect(std.mem.eql(u8, chunks.next().?, "he"));
         expect(std.mem.eql(u8, chunks.next().?, "ll"));
         expect(std.mem.eql(u8, chunks.next().?, "o"));
@@ -49,13 +50,13 @@ test "chunks" {
     }
 
     {
-        var chunks = ChunkIterator(u8).init(&hello, 6);
+        var chunks = ChunkIterMut(u8).init(&hello, 6);
         expect(std.mem.eql(u8, chunks.next().?, "hello"));
         expect(chunks.next() == null);
     }
 
     {
-        var chunks = ChunkIterator(u8).init(&hello, 5);
+        var chunks = ChunkIterMut(u8).init(&hello, 5);
         expect(std.mem.eql(u8, chunks.next().?, "hello"));
         expect(chunks.next() == null);
     }

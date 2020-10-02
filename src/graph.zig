@@ -5,7 +5,6 @@ const ArrayList = std.ArrayList;
 //;
 
 // TODO
-//   annotate error return types
 //   check if graph has a node/edge at idx or not
 //   debug.assert indices are in bounds
 //   node and edge iterators
@@ -24,7 +23,7 @@ pub const Direction = enum(usize) {
     }
 };
 
-pub const SortError = error{CycleFound};
+pub const SortError = error{CycleDetected} || Allocator.Error;
 
 // stable graph
 /// data can be accessed by going like graph.nodes.items[some_idx]
@@ -56,12 +55,12 @@ pub fn Graph(comptime N: type, comptime E: type) type {
             edge: *Edge,
         };
 
-        pub const EdgeIterator = struct {
+        pub const EdgeIter = struct {
             graph: *const Self,
             curr_idx: ?EdgeIndex,
             direction: Direction,
 
-            pub fn next(self: *EdgeIterator) ?EdgeReference {
+            pub fn next(self: *EdgeIter) ?EdgeReference {
                 const idx = self.curr_idx orelse return null;
                 const edge = &self.graph.edges.items[idx];
                 self.curr_idx = edge.next[@enumToInt(self.direction)];
@@ -93,7 +92,7 @@ pub fn Graph(comptime N: type, comptime E: type) type {
             self.nodes.deinit();
         }
 
-        pub fn clone(self: Self, allocator: *Allocator) !Self {
+        pub fn clone(self: Self, allocator: *Allocator) Allocator.Error!Self {
             var nodes = try ArrayList(Node).initCapacity(allocator, self.nodes.items.len);
             errdefer nodes.deinit();
             nodes.items.len = self.nodes.items.len;
@@ -143,7 +142,7 @@ pub fn Graph(comptime N: type, comptime E: type) type {
             }
         }
 
-        pub fn addNode(self: *Self, weight: N) !NodeIndex {
+        pub fn addNode(self: *Self, weight: N) Allocator.Error!NodeIndex {
             const idx = if (self.next_node) |idx| blk: {
                 var node = &self.nodes.items[idx];
                 self.next_node = node.next;
@@ -190,7 +189,7 @@ pub fn Graph(comptime N: type, comptime E: type) type {
             start_idx: NodeIndex,
             end_idx: NodeIndex,
             weight: E,
-        ) !EdgeIndex {
+        ) Allocator.Error!EdgeIndex {
             var node_start = &self.nodes.items[start_idx];
             var node_end = &self.nodes.items[end_idx];
 
@@ -238,10 +237,10 @@ pub fn Graph(comptime N: type, comptime E: type) type {
             self: Self,
             idx: NodeIndex,
             direction: Direction,
-        ) EdgeIterator {
+        ) EdgeIter {
             const node = self.nodes.items[idx];
             const start_idx = node.edges[@enumToInt(direction)];
-            return EdgeIterator{
+            return EdgeIter{
                 .graph = &self,
                 .curr_idx = start_idx,
                 .direction = direction,
@@ -252,7 +251,7 @@ pub fn Graph(comptime N: type, comptime E: type) type {
             self: Self,
             allocator: *Allocator,
             workspace_allocator: *Allocator,
-        ) ![]NodeIndex {
+        ) SortError![]NodeIndex {
             if (self.nodes.items.len == 0) {
                 return try allocator.alloc(NodeIndex, 0);
             }

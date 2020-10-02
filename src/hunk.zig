@@ -6,7 +6,7 @@ const assert = std.debug.assert;
 
 const Allocator = std.mem.Allocator;
 
-const vtable = @import("vtable.zig");
+const interface = @import("interface.zig");
 
 //;
 
@@ -14,17 +14,22 @@ const HunkSide = struct {
     const Self = @This();
 
     const VTable = struct {
-        alloc: fn (*HunkSide, usize, u29) Allocator.Error![]u8,
-        deinitMemory: fn (*HunkSide, usize) void,
+        alloc: fn (*Self, usize, u29) Allocator.Error![]u8,
+        deinitMemory: fn (*Self, usize) void,
     };
 
+    impl: interface.Impl,
     vtable: *const VTable,
+
+    hunk: *Hunk,
     allocator: Allocator,
     mark: usize,
 
-    pub fn init(comptime SideType: type) Self {
+    pub fn init(hunk: *Hunk, impl: interface.Impl, vtable: *const VTable) Self {
         return .{
-            .vtable = comptime vtable.populate(VTable, SideType),
+            .impl = impl,
+            .vtable = vtable,
+            .hunk = hunk,
             .allocator = .{
                 .allocFn = allocFn,
                 .resizeFn = resizeFn,
@@ -85,9 +90,8 @@ const Hunk = struct {
     const Self = @This();
 
     const Low = struct {
-        pub fn alloc(side: *HunkSide, len: usize, ptr_align: u29) Allocator.Error![]u8 {
-            const hunk = @fieldParentPtr(Hunk, "low", side);
-
+        fn alloc(side: *HunkSide, len: usize, ptr_align: u29) Allocator.Error![]u8 {
+            const hunk = side.hunk;
             const buf_start = @ptrToInt(hunk.buffer.ptr);
             const adj_idx = std.mem.alignForward(buf_start + hunk.low.mark, ptr_align) - buf_start;
             const next_mark = adj_idx + len;
@@ -99,16 +103,26 @@ const Hunk = struct {
             return ret;
         }
 
-        pub fn deinitMemory(side: *HunkSide, mark: usize) void {
-            const hunk = @fieldParentPtr(Hunk, "low", side);
+        fn deinitMemory(side: *HunkSide, mark: usize) void {
+            const hunk = side.hunk;
             std.mem.set(u8, hunk.buffer[mark..side.mark], undefined);
+        }
+
+        pub fn hunkSide(hunk: *Hunk) HunkSide {
+            return HunkSide.init(
+                hunk,
+                interface.Impl.init(&Low{}),
+                &comptime HunkSide.VTable{
+                    .alloc = alloc,
+                    .deinitMemory = deinitMemory,
+                },
+            );
         }
     };
 
     const High = struct {
         pub fn alloc(side: *HunkSide, len: usize, ptr_align: u29) Allocator.Error![]u8 {
-            const hunk = @fieldParentPtr(Hunk, "high", side);
-
+            const hunk = side.hunk;
             const buf_start = @ptrToInt(hunk.buffer.ptr);
             const buf_end = buf_start + hunk.buffer.len;
             const adj_idx = std.mem.alignBackward(buf_end - hunk.high.mark, ptr_align) - buf_start;
@@ -122,10 +136,21 @@ const Hunk = struct {
         }
 
         pub fn deinitMemory(side: *HunkSide, mark: usize) void {
-            const hunk = @fieldParentPtr(Hunk, "high", side);
+            const hunk = side.hunk;
             const start = hunk.buffer.len - side.mark;
             const end = hunk.buffer.len - mark;
             std.mem.set(u8, hunk.buffer[start..end], undefined);
+        }
+
+        pub fn hunkSide(hunk: *Hunk) HunkSide {
+            return HunkSide.init(
+                hunk,
+                interface.Impl.init(&High{}),
+                &comptime HunkSide.VTable{
+                    .alloc = alloc,
+                    .deinitMemory = deinitMemory,
+                },
+            );
         }
     };
 
@@ -133,12 +158,10 @@ const Hunk = struct {
     low: HunkSide,
     high: HunkSide,
 
-    pub fn init(buffer: []u8) Self {
-        return .{
-            .buffer = buffer,
-            .low = HunkSide.init(Low),
-            .high = HunkSide.init(High),
-        };
+    pub fn init(self: *Self, buffer: []u8) void {
+        self.buffer = buffer;
+        self.low = Low.hunkSide(self);
+        self.high = High.hunkSide(self);
     }
 };
 
@@ -149,7 +172,8 @@ const expect = testing.expect;
 
 test "hunk" {
     var buffer: [20]u8 = undefined;
-    var hunk = Hunk.init(buffer[0..]);
+    var hunk: Hunk = undefined;
+    hunk.init(buffer[0..]);
 
     {
         expect(hunk.high.getMark() == 0);
