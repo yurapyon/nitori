@@ -5,16 +5,16 @@ const assert = std.debug.assert;
 
 //;
 
-const Error = error{
-    OutOfSpace,
-    Empty,
-};
-
 /// SPSC, lock-free push and pop
 /// allocation free, data is fixed size
 pub fn Queue(comptime T: type) type {
     return struct {
         const Self = @This();
+
+        pub const Error = error{
+            OutOfSpace,
+            Empty,
+        };
 
         allocator: *Allocator,
         data: []T,
@@ -66,6 +66,8 @@ pub fn Queue(comptime T: type) type {
 pub fn Channel(comptime T: type) type {
     return struct {
         const Self = @This();
+
+        pub const Error = Queue(T).Error;
 
         pub const Receiver = struct {
             channel: *Self,
@@ -123,6 +125,8 @@ pub fn Channel(comptime T: type) type {
 pub fn EventChannel(comptime T: type) type {
     return struct {
         const Self = @This();
+
+        pub const Error = Channel(T).Error;
 
         pub const Event = struct {
             timestamp: u64,

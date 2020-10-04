@@ -23,13 +23,13 @@ pub const Direction = enum(usize) {
     }
 };
 
-pub const SortError = error{CycleDetected} || Allocator.Error;
-
 // stable graph
 /// data can be accessed by going like graph.nodes.items[some_idx]
 pub fn Graph(comptime N: type, comptime E: type) type {
     return struct {
         const Self = @This();
+
+        pub const SortError = error{CycleDetected} || Allocator.Error;
 
         pub const Node = struct {
             weight: N,
@@ -351,13 +351,13 @@ test "graph" {
 
     var edges = g.edgesDirected(a, .Outgoing);
     while (edges.next()) |ref| {
-        std.log.warn("\n{}\n", .{ref.edge});
+        // std.log.warn("\n{}\n", .{ref.edge});
     }
 
     const sort = try g.toposort(alloc, alloc);
     defer alloc.free(sort);
     for (sort) |idx| {
         const node = g.nodes.items[idx];
-        std.log.warn("{c}\n", .{node.weight});
+        // std.log.warn("{c}\n", .{node.weight});
     }
 }

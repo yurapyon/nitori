@@ -7,7 +7,6 @@ pub const interface = @import("interface.zig");
 pub const matrix = @import("matrix.zig");
 pub const pool = @import("pool.zig");
 pub const timer = @import("timer.zig");
-pub const vtable = @import("vtable.zig");
 
 test "" {
     _ = chunks;
@@ -19,5 +18,4 @@ test "" {
     _ = matrix;
     _ = pool;
     _ = timer;
-    _ = vtable;
 }

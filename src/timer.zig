@@ -5,10 +5,12 @@ const _Timer = std.time.Timer;
 pub const Timer = struct {
     const Self = @This();
 
+    pub const Error = _Timer.Error;
+
     tm: _Timer,
     last_now: u64,
 
-    pub fn start() _Timer.Error!Self {
+    pub fn start() Error!Self {
         return Self{
             .tm = try _Timer.start(),
             .last_now = 0,
