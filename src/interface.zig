@@ -2,9 +2,13 @@ const std = @import("std");
 
 pub const Impl = struct {
     const Self = @This();
-    const Ptr = @Type(.Opaque);
+    const Ptr = opaque {};
 
     ptr: ?*Ptr,
+
+    pub fn initEmpty() Self {
+        return .{ .ptr = null };
+    }
 
     pub fn init(ptr: anytype) Self {
         const T = @typeInfo(@TypeOf(ptr)).Pointer.child;

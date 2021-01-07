@@ -5,6 +5,9 @@ const assert = std.debug.assert;
 
 //;
 
+// TODO maybe make it so ptrs hold offsets rather than pointers, and cant be invalidated by pool resizes
+//  maybe make it so this thing can be easier resized?
+
 // could further increase cache locality by doing a binary search to kill objects
 //   or something
 // some way of using the lowest offsets first so theyre all usually in one spot

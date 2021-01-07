@@ -25,7 +25,7 @@ pub const ArgType = @TagType(ArgValue);
 
 pub const ArgDef = struct {
     ty: ArgType,
-    name: []const u8,
+    name: []const u8 = "",
     default: ?ArgValue = null,
 };
 
