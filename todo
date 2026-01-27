@@ -1,3 +1,0 @@
-reorganize somehow
-  this is to be used as a package so maybe flattening it
-    and just running tests with zig tests main.zig (nitori.zig)

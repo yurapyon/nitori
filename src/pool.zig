@@ -3,7 +3,7 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const assert = std.debug.assert;
 
-//;
+// ===
 
 // TODO maybe make it so ptrs hold offsets rather than pointers, and cant be invalidated by pool resizes
 //  maybe make it so this thing can be easier resized?
@@ -55,39 +55,40 @@ pub fn Pool(comptime T: type) type {
             }
 
             // TODO
-            pub fn killStable(self: *Ptr) void {}
+            pub fn killStable(self: *Ptr) void {
+                _ = self;
+            }
         };
 
         data: ArrayList(T),
         offsets: ArrayList(usize),
         alive_ct: usize,
 
-        pub fn init(allocator: *Allocator, initial_size: usize) !Self {
+        pub fn init(self: *@This(), allocator: Allocator, initial_size: usize) !void {
             var data = try ArrayList(T).initCapacity(allocator, initial_size);
             data.appendNTimesAssumeCapacity(undefined, initial_size);
 
             var offsets = try ArrayList(usize).initCapacity(allocator, initial_size);
             var i: usize = 0;
             while (i < initial_size) : (i += 1) {
-                offsets.append(i) catch unreachable;
+                offsets.append(allocator, i) catch unreachable;
             }
 
-            return Self{
-                .data = data,
-                .offsets = offsets,
-                .alive_ct = 0,
-            };
+            // TODO
+            self.data = data;
+            self.offsets = offsets;
+            self.alive_ct = 0;
         }
 
-        pub fn deinit(self: *Self) void {
-            self.offsets.deinit();
-            self.data.deinit();
+        pub fn deinit(self: *@This(), allocator: Allocator) void {
+            self.offsets.deinit(allocator);
+            self.data.deinit(allocator);
         }
 
         //;
 
         // asserts pool isnt empty
-        pub fn spawn(self: *Self) *T {
+        pub fn spawn(self: *@This()) *T {
             assert(!self.isEmpty());
             const at = self.alive_ct;
             self.alive_ct += 1;
@@ -96,25 +97,25 @@ pub fn Pool(comptime T: type) type {
 
         // TODO maybe return an error here instead
         //    if not, rename to maybeSpawn
-        pub fn trySpawn(self: *Self) ?*T {
+        pub fn trySpawn(self: *@This()) ?*T {
             if (self.isEmpty()) return null;
             return self.spawn();
         }
 
         // TODO killStable
         // asserts this object is from this pool, and is alive
-        pub fn kill(self: *Self, obj: *T) void {
+        pub fn kill(self: *@This(), obj: *T) void {
             // assert ptr is from this pool
             assert(blk: {
-                const t = @ptrToInt(obj);
-                const d = @ptrToInt(self.data.items.ptr);
+                const t = @intFromPtr(obj);
+                const d = @intFromPtr(self.data.items.ptr);
                 break :blk t >= d and t < (d + self.data.items.len * @sizeOf(T));
             });
 
             // assert ptr is alive
             assert(blk: {
-                const t = @ptrToInt(obj);
-                const d = @ptrToInt(self.data.items.ptr);
+                const t = @intFromPtr(obj);
+                const d = @intFromPtr(self.data.items.ptr);
                 const o = (t - d) / @sizeOf(T);
                 var i: usize = 0;
                 while (i < self.alive_ct) : (i += 1) {
@@ -125,8 +126,8 @@ pub fn Pool(comptime T: type) type {
                 break :blk false;
             });
 
-            const obj_ptr = @ptrToInt(obj);
-            const data_ptr = @ptrToInt(self.data.items.ptr);
+            const obj_ptr = @intFromPtr(obj);
+            const data_ptr = @intFromPtr(self.data.items.ptr);
             const offset = (obj_ptr - data_ptr) / @sizeOf(T);
 
             self.alive_ct -= 1;
@@ -143,7 +144,7 @@ pub fn Pool(comptime T: type) type {
             }
         }
 
-        pub fn spawnPtr(self: *Self) Ptr {
+        pub fn spawnPtr(self: *@This()) Ptr {
             return .{
                 .pool = self,
                 .obj = self.spawn(),
@@ -155,29 +156,32 @@ pub fn Pool(comptime T: type) type {
         // this function may invalidate pointers to objects in the pool
         //   if you plan to use this function it's recommended let the pool manage the memory for you,
         //     using iterators and reclaim
-        pub fn pleaseSpawn(self: *Self) !*T {
+        pub fn pleaseSpawn(self: *@This(), allocator: Allocator) !*T {
             if (self.isEmpty()) {
-                try self.offsets.append(self.data.items.len);
-                _ = try self.data.addOne();
+                try self.offsets.append(
+                    allocator,
+                    self.data.items.len,
+                );
+                _ = try self.data.addOne(allocator);
             }
             return self.spawn();
         }
 
-        pub fn iter(self: *const Self) Iter {
+        pub fn iter(self: *const @This()) Iter {
             return .{
                 .pool = self,
                 .idx = 0,
             };
         }
 
-        pub fn iterMut(self: *Self) IterMut {
+        pub fn iterMut(self: *@This()) IterMut {
             return .{
                 .pool = self,
                 .idx = 0,
             };
         }
 
-        pub fn reclaim(self: *Self, killFn: fn (*T) bool) void {
+        pub fn reclaim(self: *@This(), killFn: fn (*T) bool) void {
             var len = self.alive_ct;
             var i: usize = 0;
             while (i < len) {
@@ -194,7 +198,7 @@ pub fn Pool(comptime T: type) type {
             self.alive_ct = len;
         }
 
-        pub fn reclaimStable(self: *Self, killFn: fn (*T) bool) void {
+        pub fn reclaimStable(self: *@This(), killFn: fn (*T) bool) void {
             const len = self.alive_ct;
             var del: usize = 0;
             var i: usize = 0;
@@ -221,19 +225,19 @@ pub fn Pool(comptime T: type) type {
 
         //;
 
-        pub fn isEmpty(self: Self) bool {
+        pub fn isEmpty(self: @This()) bool {
             return self.deadCount() == 0;
         }
 
-        pub fn aliveCount(self: Self) usize {
+        pub fn aliveCount(self: @This()) usize {
             return self.alive_ct;
         }
 
-        pub fn deadCount(self: Self) usize {
+        pub fn deadCount(self: @This()) usize {
             return self.offsets.items.len - self.alive_ct;
         }
 
-        pub fn capacity(self: Self) usize {
+        pub fn capacity(self: @This()) usize {
             return self.offsets.items.len;
         }
     };
@@ -253,39 +257,40 @@ fn kill3(value: *u8) bool {
 }
 
 test "Pool" {
-    var pool = try Pool(u8).init(testing.allocator, 10);
-    defer pool.deinit();
+    var pool: Pool(u8) = undefined;
+    try pool.init(testing.allocator, 10);
+    defer pool.deinit(testing.allocator);
 
     pool.trySpawn().?.* = 1;
     pool.trySpawn().?.* = 2;
     pool.trySpawn().?.* = 3;
     pool.trySpawn().?.* = 4;
     pool.trySpawn().?.* = 5;
-    expect(pool.aliveCount() == 5);
+    try expect(pool.aliveCount() == 5);
 
     var iter = pool.iter();
 
     // order is guaranteed in the order you spawned them
-    expect(iter.next().?.* == 1);
-    expect(iter.next().?.* == 2);
-    expect(iter.next().?.* == 3);
-    expect(iter.next().?.* == 4);
-    expect(iter.next().?.* == 5);
-    expect(iter.next() == null);
+    try expect(iter.next().?.* == 1);
+    try expect(iter.next().?.* == 2);
+    try expect(iter.next().?.* == 3);
+    try expect(iter.next().?.* == 4);
+    try expect(iter.next().?.* == 5);
+    try expect(iter.next() == null);
 
     // won't mess with order
     pool.reclaimStable(killEven);
-    expect(pool.aliveCount() == 3);
+    try expect(pool.aliveCount() == 3);
 
     iter = pool.iter();
-    expect(iter.next().?.* == 1);
-    expect(iter.next().?.* == 3);
-    expect(iter.next().?.* == 5);
-    expect(iter.next() == null);
+    try expect(iter.next().?.* == 1);
+    try expect(iter.next().?.* == 3);
+    try expect(iter.next().?.* == 5);
+    try expect(iter.next() == null);
 
     // may mess with the order
     pool.reclaim(kill3);
-    expect(pool.aliveCount() == 2);
+    try expect(pool.aliveCount() == 2);
 
     var found_one: bool = false;
     var found_five: bool = false;
@@ -293,37 +298,38 @@ test "Pool" {
     iter = pool.iter();
     while (iter.next()) |val| {
         if (val.* == 1) {
-            expect(!found_one);
+            try expect(!found_one);
             found_one = true;
         } else if (val.* == 5) {
-            expect(!found_five);
+            try expect(!found_five);
             found_five = true;
         }
     }
 
-    expect(found_one);
-    expect(found_five);
+    try expect(found_one);
+    try expect(found_five);
 
     var i: usize = 0;
     while (i < 8) : (i += 1) {
         pool.trySpawn().?.* = 0;
     }
 
-    expect(pool.trySpawn() == null);
+    try expect(pool.trySpawn() == null);
 
-    _ = try pool.pleaseSpawn();
+    _ = try pool.pleaseSpawn(testing.allocator);
 
-    expect(pool.capacity() == 11);
-    expect(pool.aliveCount() == 11);
-    expect(pool.isEmpty());
+    try expect(pool.capacity() == 11);
+    try expect(pool.aliveCount() == 11);
+    try expect(pool.isEmpty());
 }
 
 test "Pool kill" {
-    var pool = try Pool(u8).init(testing.allocator, 10);
-    defer pool.deinit();
+    var pool: Pool(u8) = undefined;
+    try pool.init(testing.allocator, 10);
+    defer pool.deinit(testing.allocator);
 
     const obj = pool.spawn();
-    expect(pool.aliveCount() == 1);
+    try expect(pool.aliveCount() == 1);
     pool.kill(obj);
-    expect(pool.aliveCount() == 0);
+    try expect(pool.aliveCount() == 0);
 }
