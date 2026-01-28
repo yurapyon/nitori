@@ -5,9 +5,7 @@ const assert = std.debug.assert;
 
 // ===
 
-// TODO maybe make it so ptrs hold offsets rather than pointers, and cant be invalidated by pool resizes
-//  maybe make it so this thing can be easier resized?
-
+// TODO NOTE
 // could further increase cache locality by doing a binary search to kill objects
 //   or something
 // some way of using the lowest offsets first so theyre all usually in one spot
@@ -60,23 +58,24 @@ pub fn Pool(comptime T: type) type {
             }
         };
 
+        // TODO
+        // maybe don't need arraylist
         data: ArrayList(T),
         offsets: ArrayList(usize),
         alive_ct: usize,
 
         pub fn init(self: *@This(), allocator: Allocator, initial_size: usize) !void {
-            var data = try ArrayList(T).initCapacity(allocator, initial_size);
-            data.appendNTimesAssumeCapacity(undefined, initial_size);
+            self.data = .empty;
+            try self.data.appendNTimes(allocator, undefined, initial_size);
 
-            var offsets = try ArrayList(usize).initCapacity(allocator, initial_size);
+            self.offsets = .empty;
+            try self.offsets.ensureTotalCapacity(allocator, initial_size);
+
             var i: usize = 0;
             while (i < initial_size) : (i += 1) {
-                offsets.append(allocator, i) catch unreachable;
+                self.offsets.append(allocator, i) catch unreachable;
             }
 
-            // TODO
-            self.data = data;
-            self.offsets = offsets;
             self.alive_ct = 0;
         }
 
@@ -88,53 +87,50 @@ pub fn Pool(comptime T: type) type {
         //;
 
         // asserts pool isnt empty
-        pub fn spawn(self: *@This()) *T {
+        pub fn spawn(self: *@This()) usize {
             assert(!self.isEmpty());
             const at = self.alive_ct;
             self.alive_ct += 1;
-            return &self.data.items[self.offsets.items[at]];
+            return self.offsets.items[at];
         }
 
-        // TODO maybe return an error here instead
-        //    if not, rename to maybeSpawn
-        pub fn trySpawn(self: *@This()) ?*T {
-            if (self.isEmpty()) return null;
+        pub fn trySpawn(self: *@This()) !usize {
+            if (self.isEmpty()) return error.Empty;
             return self.spawn();
         }
 
         // TODO killStable
         // asserts this object is from this pool, and is alive
-        pub fn kill(self: *@This(), obj: *T) void {
+        pub fn kill(self: *@This(), id: usize) void {
             // assert ptr is from this pool
             assert(blk: {
-                const t = @intFromPtr(obj);
-                const d = @intFromPtr(self.data.items.ptr);
-                break :blk t >= d and t < (d + self.data.items.len * @sizeOf(T));
+                break :blk id < self.data.items.len;
             });
 
+            // TODO
             // assert ptr is alive
-            assert(blk: {
-                const t = @intFromPtr(obj);
-                const d = @intFromPtr(self.data.items.ptr);
-                const o = (t - d) / @sizeOf(T);
-                var i: usize = 0;
-                while (i < self.alive_ct) : (i += 1) {
-                    if (self.offsets.items[i] == o) {
-                        break :blk true;
-                    }
-                }
-                break :blk false;
-            });
+            //assert(blk: {
+            //                 const t = @intFromPtr(obj);
+            //                 const d = @intFromPtr(self.data.items.ptr);
+            //                 const o = (t - d) / @sizeOf(T);
+            //                 var i: usize = 0;
+            //                 while (i < self.alive_ct) : (i += 1) {
+            //                     if (self.offsets.items[i] == o) {
+            //                         break :blk true;
+            //                     }
+            //                 }
+            //                 break :blk false;
+            //});
 
-            const obj_ptr = @intFromPtr(obj);
-            const data_ptr = @intFromPtr(self.data.items.ptr);
-            const offset = (obj_ptr - data_ptr) / @sizeOf(T);
+            // const obj_ptr = @intFromPtr(obj);
+            // const data_ptr = @intFromPtr(self.data.items.ptr);
+            // const offset = (obj_ptr - data_ptr) / @sizeOf(T);
 
             self.alive_ct -= 1;
 
             var i: usize = 0;
             while (i < self.alive_ct) : (i += 1) {
-                if (self.offsets.items[i] == offset) {
+                if (self.offsets.items[i] == id) {
                     std.mem.swap(
                         usize,
                         &self.offsets.items[self.alive_ct],
@@ -156,7 +152,7 @@ pub fn Pool(comptime T: type) type {
         // this function may invalidate pointers to objects in the pool
         //   if you plan to use this function it's recommended let the pool manage the memory for you,
         //     using iterators and reclaim
-        pub fn pleaseSpawn(self: *@This(), allocator: Allocator) !*T {
+        pub fn pleaseSpawn(self: *@This(), allocator: Allocator) !usize {
             if (self.isEmpty()) {
                 try self.offsets.append(
                     allocator,
@@ -261,11 +257,11 @@ test "Pool" {
     try pool.init(testing.allocator, 10);
     defer pool.deinit(testing.allocator);
 
-    pool.trySpawn().?.* = 1;
-    pool.trySpawn().?.* = 2;
-    pool.trySpawn().?.* = 3;
-    pool.trySpawn().?.* = 4;
-    pool.trySpawn().?.* = 5;
+    pool.data.items[try pool.trySpawn()] = 1;
+    pool.data.items[try pool.trySpawn()] = 2;
+    pool.data.items[try pool.trySpawn()] = 3;
+    pool.data.items[try pool.trySpawn()] = 4;
+    pool.data.items[try pool.trySpawn()] = 5;
     try expect(pool.aliveCount() == 5);
 
     var iter = pool.iter();
@@ -311,10 +307,11 @@ test "Pool" {
 
     var i: usize = 0;
     while (i < 8) : (i += 1) {
-        pool.trySpawn().?.* = 0;
+        pool.data.items[try pool.trySpawn()] = 1;
     }
 
-    try expect(pool.trySpawn() == null);
+    // TODO is there expectError?
+    try expect(pool.trySpawn() == error.Empty);
 
     _ = try pool.pleaseSpawn(testing.allocator);
 
